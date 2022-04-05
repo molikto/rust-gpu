@@ -37,6 +37,12 @@ pub fn inline(sess: &Session, module: &mut Module) -> super::Result<()> {
     let mut dropped_ids = FxHashSet::default();
     module.functions.retain(|f| {
         if should_inline(&disallowed_argument_types, &disallowed_return_types, f) {
+            if has_dont_inline(f) {
+                sess.warn(&format!(
+                    "Function `{}` has `dont_inline` attribute, but need to be inlined because it has illegal argument or return types",
+                    get_name(&get_names(module), f.def_id().unwrap())
+                ));
+            }
             // TODO: We should insert all defined IDs in this function.
             dropped_ids.insert(f.def_id().unwrap());
             false
@@ -202,6 +208,15 @@ fn compute_disallowed_argument_and_return_types(
     (disallowed_argument_types, disallowed_return_types)
 }
 
+fn has_dont_inline(
+    function: &Function,
+) -> bool {
+    let def = function.def.as_ref().unwrap();
+    let control = def.operands[0].unwrap_function_control();
+    control.contains(FunctionControl::DONT_INLINE)
+}
+
+
 fn should_inline(
     disallowed_argument_types: &FxHashSet<Word>,
     disallowed_return_types: &FxHashSet<Word>,
@@ -209,16 +224,12 @@ fn should_inline(
 ) -> bool {
     let def = function.def.as_ref().unwrap();
     let control = def.operands[0].unwrap_function_control();
-    let should = control.contains(FunctionControl::INLINE)
+    control.contains(FunctionControl::INLINE)
         || function
             .parameters
             .iter()
             .any(|inst| disallowed_argument_types.contains(inst.result_type.as_ref().unwrap()))
-        || disallowed_return_types.contains(&function.def.as_ref().unwrap().result_type.unwrap());
-    // if should && control.contains(FunctionControl::DONT_INLINE) {
-    //     println!("should not be inlined!");
-    // }
-    should
+        || disallowed_return_types.contains(&function.def.as_ref().unwrap().result_type.unwrap())
 }
 
 // This should be more general, but a very common problem is passing an OpAccessChain to an
