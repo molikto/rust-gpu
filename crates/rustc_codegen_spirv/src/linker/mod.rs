@@ -6,6 +6,7 @@ mod destructure_composites;
 mod duplicates;
 mod entry_interface;
 mod import_export_link;
+mod inline_globals;
 mod inline;
 mod ipo;
 mod mem2reg;
@@ -152,6 +153,7 @@ pub fn link(sess: &Session, mut inputs: Vec<Module>, opts: &Options) -> Result<L
         std::fs::write(path, spirv_tools::binary::from_binary(&output.assemble())).unwrap();
     }
 
+
     // remove duplicates (https://github.com/KhronosGroup/SPIRV-Tools/blob/e7866de4b1dc2a7e8672867caeb0bdca49f458d3/source/opt/remove_duplicates_pass.cpp)
     {
         let _timer = sess.timer("link_remove_duplicates");
@@ -214,6 +216,11 @@ pub fn link(sess: &Session, mut inputs: Vec<Module>, opts: &Options) -> Result<L
                 concrete_fallback: Operand::StorageClass(StorageClass::Function),
             },
         );
+    }
+
+    {
+        let _timer = sess.timer("link_inline_global");
+        inline_globals::inline_global_varaibles(sess, &mut output)?;
     }
 
     {
@@ -349,6 +356,7 @@ pub fn link(sess: &Session, mut inputs: Vec<Module>, opts: &Options) -> Result<L
             output.header.as_mut().unwrap().bound = simple_passes::compact_ids(output);
         };
     }
+
 
     Ok(output)
 }
