@@ -33,14 +33,13 @@ impl<'tcx> CodegenCx<'tcx> {
     ) {
         let span = self.tcx.def_span(instance.def_id());
         let hir_params = {
-            let fn_local_def_id = match instance.def_id().as_local() {
-                Some(id) => id,
-                None => {
-                    self.tcx
-                        .sess
-                        .span_err(span, &format!("Cannot declare {} as an entry point", name));
-                    return;
-                }
+            let fn_local_def_id = if let Some(id) = instance.def_id().as_local() {
+                id
+            } else {
+                self.tcx
+                    .sess
+                    .span_err(span, &format!("Cannot declare {} as an entry point", name));
+                return;
             };
             let fn_hir_id = self.tcx.hir().local_def_id_to_hir_id(fn_local_def_id);
             let body = self.tcx.hir().body(self.tcx.hir().body_owned_by(fn_hir_id));
@@ -239,26 +238,27 @@ impl<'tcx> CodegenCx<'tcx> {
                     storage_class_attr.span,
                     "redundant storage class specifier, storage class is inferred from type",
                 ),
-                Some(inferred) => self
-                    .tcx
-                    .sess
-                    .struct_span_err(hir_param.span, "storage class mismatch")
-                    .span_label(
-                        storage_class_attr.span,
-                        format!("{:?} specified in attribute", storage_class),
-                    )
-                    .span_label(
-                        hir_param.ty_span,
-                        format!("{:?} inferred from type", inferred),
-                    )
-                    .span_help(
-                        storage_class_attr.span,
-                        &format!(
-                            "remove storage class attribute to use {:?} as storage class",
-                            inferred
-                        ),
-                    )
-                    .emit(),
+                Some(inferred) => {
+                    self.tcx
+                        .sess
+                        .struct_span_err(hir_param.span, "storage class mismatch")
+                        .span_label(
+                            storage_class_attr.span,
+                            format!("{:?} specified in attribute", storage_class),
+                        )
+                        .span_label(
+                            hir_param.ty_span,
+                            format!("{:?} inferred from type", inferred),
+                        )
+                        .span_help(
+                            storage_class_attr.span,
+                            &format!(
+                                "remove storage class attribute to use {:?} as storage class",
+                                inferred
+                            ),
+                        )
+                        .emit();
+                }
                 None => (),
             }
 
@@ -327,10 +327,12 @@ impl<'tcx> CodegenCx<'tcx> {
                 let value_len = if is_unsized_with_len {
                     match self.lookup_type(value_spirv_type) {
                         SpirvType::RuntimeArray { .. } => {}
-                        _ => self.tcx.sess.span_err(
-                            hir_param.ty_span,
-                            "only plain slices are supported as unsized types",
-                        ),
+                        _ => {
+                            self.tcx.sess.span_err(
+                                hir_param.ty_span,
+                                "only plain slices are supported as unsized types",
+                            );
+                        }
                     }
 
                     // FIXME(eddyb) shouldn't this be `usize`?
